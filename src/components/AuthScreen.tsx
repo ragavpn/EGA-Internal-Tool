@@ -247,10 +247,13 @@ export function AuthScreen({ onUserLogin, onAdminLogin }: AuthScreenProps) {
     setSocialLoading(true);
 
     try {
+      // Use environment variable if set, otherwise fall back to current origin
+      const redirectTo = import.meta.env.VITE_AUTH_REDIRECT_URL || window.location.origin;
+      
       const { error } = await supabase.auth.signInWithOAuth({
         provider: provider,
         options: {
-          redirectTo: window.location.origin,
+          redirectTo: redirectTo,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
