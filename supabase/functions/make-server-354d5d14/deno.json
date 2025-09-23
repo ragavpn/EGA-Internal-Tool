@@ -1,0 +1,14 @@
+{
+  "imports": {
+    "hono": "https://deno.land/x/hono@v3.12.11/mod.ts",
+    "hono/cors": "https://deno.land/x/hono@v3.12.11/middleware/cors/index.ts",
+    "hono/logger": "https://deno.land/x/hono@v3.12.11/middleware/logger/index.ts",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.45.4"
+  },
+  "compilerOptions": {
+    "allowJs": true,
+    "types": [
+      "https://raw.githubusercontent.com/denoland/deno/main/cli/dts/lib.deno.ns.d.ts"
+    ]
+  }
+}
