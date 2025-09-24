@@ -79,6 +79,45 @@ export function Profile({ user, onUserLogout, onUserUpdate }: ProfileProps) {
     }
   };
 
+  const handleDeleteDocument = async (document: any) => {
+    try {
+      const response = await fetch(
+        `${functionsBase(projectId)}/documents/${document.id}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${publicAnonKey}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (response.ok) {
+        const result = await response.json();
+
+        // Remove the document from the local state
+        setUserActivity(prev => ({
+          ...prev,
+          documentsUploaded: prev.documentsUploaded.filter(doc => doc.id !== document.id)
+        }));
+
+        if (result.fileDeleted) {
+          toast.success('Document and file deleted successfully');
+        } else if (result.fileError) {
+          toast.success(`Document deleted from database, but file deletion failed: ${result.fileError}`);
+        } else {
+          toast.success('Document deleted successfully');
+        }
+      } else {
+        const error = await response.json();
+        toast.error(error.error || 'Failed to delete document');
+      }
+    } catch (error) {
+      console.error('Error deleting document:', error);
+      toast.error('Failed to delete document');
+    }
+  };
+
   const handleDeleteAccount = async () => {
     try {
       const response = await fetch(
@@ -96,6 +135,8 @@ export function Profile({ user, onUserLogout, onUserUpdate }: ProfileProps) {
         toast.success('Account deleted successfully');
         // Sign out the user after deletion
         await supabase.auth.signOut();
+        // Trigger logout in parent component
+        onUserLogout();
       } else {
         const error = await response.json();
         toast.error(error.error || 'Failed to delete account');
@@ -568,6 +609,16 @@ export function Profile({ user, onUserLogout, onUserUpdate }: ProfileProps) {
                           >
                             <Download className="h-3 w-3" />
                           </Button>
+                          {document.status === 'pending_signature' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteDocument(document)}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </Card>
