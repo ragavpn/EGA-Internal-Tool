@@ -159,6 +159,67 @@ app.post(`${BASE_PATH}/signup`, async (c) => {
   }
 });
 
+// Admin authentication endpoint
+app.post(`${BASE_PATH}/admin/auth`, async (c) => {
+  try {
+    const { username, password } = await c.req.json();
+
+    if (!username || !password) {
+      return c.json({ error: 'Username and password are required' }, 400);
+    }
+
+    // Get admin credentials from environment variables
+    const adminUsername = getEnv('ADMIN_USERNAME') || 'admin';
+    const adminPassword = getEnv('ADMIN_PASSWORD') || 'egainternaltool2025';
+
+    if (username === adminUsername && password === adminPassword) {
+      return c.json({
+        success: true,
+        admin: {
+          username: adminUsername,
+          isAdmin: true,
+          authenticatedAt: new Date().toISOString()
+        }
+      });
+    } else {
+      return c.json({ error: 'Invalid admin credentials' }, 401);
+    }
+  } catch (error) {
+    console.log('Admin authentication error:', error);
+    return c.json({ error: 'Failed to authenticate admin' }, 500);
+  }
+});
+
+// Admin password change endpoint
+app.post(`${BASE_PATH}/admin/change-password`, async (c) => {
+  try {
+    const { currentPassword, newPassword } = await c.req.json();
+
+    if (!currentPassword || !newPassword) {
+      return c.json({ error: 'Current and new passwords are required' }, 400);
+    }
+
+    // Get current admin password from environment
+    const adminPassword = getEnv('ADMIN_PASSWORD') || 'egainternaltool2025';
+
+    if (currentPassword !== adminPassword) {
+      return c.json({ error: 'Current password is incorrect' }, 401);
+    }
+
+    // Note: In a real implementation, you would update the password in your environment
+    // For now, this is a placeholder that always succeeds
+    console.log('Admin password change requested - would update ADMIN_PASSWORD secret');
+
+    return c.json({
+      success: true,
+      message: 'Password change request received. Please update ADMIN_PASSWORD environment variable manually.'
+    });
+  } catch (error) {
+    console.log('Admin password change error:', error);
+    return c.json({ error: 'Failed to change admin password' }, 500);
+  }
+});
+
 // User profile update route (for social login updates)
 app.post(`${BASE_PATH}/users/profile`, async (c) => {
   try {
@@ -325,7 +386,7 @@ app.delete(`${BASE_PATH}/admin/users/:employeeId`, async (c) => {
 app.delete(`${BASE_PATH}/user/:employeeId`, async (c) => {
   try {
     const employeeId = c.req.param('employeeId');
-    
+
     // Find user in Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.admin.listUsers();
     if (authError) {
@@ -333,8 +394,8 @@ app.delete(`${BASE_PATH}/user/:employeeId`, async (c) => {
       return c.json({ error: 'Failed to fetch users' }, 500);
     }
 
-    const authUser = authData?.users?.find((u: any) => 
-      u.user_metadata?.employeeId === employeeId || 
+    const authUser = authData?.users?.find((u: any) =>
+      u.user_metadata?.employeeId === employeeId ||
       (u.email && u.email.split('@')[0] === employeeId)
     );
 
@@ -362,7 +423,7 @@ app.put(`${BASE_PATH}/user/:employeeId/profile`, async (c) => {
   try {
     const employeeId = c.req.param('employeeId');
     const { name, newEmployeeId, avatar } = await c.req.json();
-    
+
     // Find user in Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.admin.listUsers();
     if (authError) {
@@ -370,8 +431,8 @@ app.put(`${BASE_PATH}/user/:employeeId/profile`, async (c) => {
       return c.json({ error: 'Failed to fetch users' }, 500);
     }
 
-    const authUser = authData?.users?.find((u: any) => 
-      u.user_metadata?.employeeId === employeeId || 
+    const authUser = authData?.users?.find((u: any) =>
+      u.user_metadata?.employeeId === employeeId ||
       (u.email && u.email.split('@')[0] === employeeId)
     );
 
@@ -381,11 +442,11 @@ app.put(`${BASE_PATH}/user/:employeeId/profile`, async (c) => {
 
     // Check if new employee ID is already taken (if provided)
     if (newEmployeeId && newEmployeeId !== employeeId) {
-      const existingUser = authData?.users?.find((u: any) => 
-        u.user_metadata?.employeeId === newEmployeeId || 
+      const existingUser = authData?.users?.find((u: any) =>
+        u.user_metadata?.employeeId === newEmployeeId ||
         (u.email && u.email.split('@')[0] === newEmployeeId)
       );
-      
+
       if (existingUser) {
         return c.json({ error: 'Employee ID already taken' }, 409);
       }
@@ -549,21 +610,49 @@ app.delete(`${BASE_PATH}/clear-devices`, async (c) => {
 // Clear documents only
 app.delete(`${BASE_PATH}/clear-documents`, async (c) => {
   try {
-    console.log('Clearing all documents from database...');
+    console.log('Clearing all documents from database and storage...');
 
     const allDocumentsWithKeys = await kv.getByPrefixWithKeys('doc:');
     console.log(`Found ${allDocumentsWithKeys.length} documents`);
 
-    // Delete all documents
+    let deletedFiles = 0;
+    let failedFiles = 0;
+
+    // Delete physical files from storage and database records
     for (const row of allDocumentsWithKeys) {
+      const document = row.value;
+
+      // Delete physical file from storage if storagePath exists
+      if (document?.storagePath) {
+        try {
+          const { error: storageError } = await supabase.storage
+            .from(BUCKET_NAME)
+            .remove([document.storagePath]);
+
+          if (storageError) {
+            console.log(`Failed to delete file ${document.storagePath}:`, storageError);
+            failedFiles++;
+          } else {
+            deletedFiles++;
+            console.log(`Deleted file: ${document.storagePath}`);
+          }
+        } catch (err) {
+          console.log(`Error deleting file ${document.storagePath}:`, err);
+          failedFiles++;
+        }
+      }
+
+      // Delete database record
       await kv.del(row.key);
     }
 
-    console.log('All documents cleared successfully');
+    console.log(`All documents cleared successfully. Files deleted: ${deletedFiles}, Failed: ${failedFiles}`);
     return c.json({
       success: true,
-      message: 'All documents cleared successfully',
-      cleared: allDocumentsWithKeys.length
+      message: `All documents cleared successfully. Files deleted: ${deletedFiles}, Failed: ${failedFiles}`,
+      cleared: allDocumentsWithKeys.length,
+      filesDeleted: deletedFiles,
+      filesFailed: failedFiles
     });
   } catch (error) {
     console.log('Error clearing documents:', error);
@@ -579,6 +668,55 @@ app.get(`${BASE_PATH}/documents`, async (c) => {
   } catch (error) {
     console.log('Error fetching documents:', error);
     return c.json({ error: 'Failed to fetch documents' }, 500);
+  }
+});
+
+// Delete individual document with physical file removal
+app.delete(`${BASE_PATH}/documents/:documentId`, async (c) => {
+  try {
+    const documentId = c.req.param('documentId');
+    const document = await kv.get(documentId);
+
+    if (!document) {
+      return c.json({ error: 'Document not found' }, 404);
+    }
+
+    // Delete physical file from storage if it exists
+    let fileDeleted = false;
+    let fileError = null;
+
+    if (document.storagePath) {
+      try {
+        const { error: storageError } = await supabase.storage
+          .from(BUCKET_NAME)
+          .remove([document.storagePath]);
+
+        if (storageError) {
+          console.log(`Failed to delete file ${document.storagePath}:`, storageError);
+          fileError = storageError.message;
+        } else {
+          fileDeleted = true;
+          console.log(`Deleted file: ${document.storagePath}`);
+        }
+      } catch (err) {
+        console.log(`Error deleting file ${document.storagePath}:`, err);
+        fileError = String(err);
+      }
+    }
+
+    // Delete database record
+    await kv.del(documentId);
+
+    console.log(`Document ${documentId} deleted successfully. File deleted: ${fileDeleted}`);
+    return c.json({
+      success: true,
+      message: 'Document deleted successfully',
+      fileDeleted,
+      fileError: fileError || undefined
+    });
+  } catch (error) {
+    console.log('Error deleting document:', error);
+    return c.json({ error: 'Failed to delete document' }, 500);
   }
 });
 
@@ -1189,8 +1327,31 @@ app.delete(`${BASE_PATH}/clear-all-data`, async (c) => {
       await kv.del(check.id);
     }
 
-    // Delete all documents
+    // Delete all documents and their physical files
+    let deletedFiles = 0;
+    let failedFiles = 0;
+
     for (const document of allDocuments) {
+      // Delete physical file from storage if it exists
+      if (document.storagePath) {
+        try {
+          const { error: storageError } = await supabase.storage
+            .from(BUCKET_NAME)
+            .remove([document.storagePath]);
+
+          if (storageError) {
+            console.log(`Failed to delete file ${document.storagePath}:`, storageError);
+            failedFiles++;
+          } else {
+            deletedFiles++;
+          }
+        } catch (err) {
+          console.log(`Error deleting file ${document.storagePath}:`, err);
+          failedFiles++;
+        }
+      }
+
+      // Delete database record
       await kv.del(document.id);
     }
 
@@ -1199,16 +1360,18 @@ app.delete(`${BASE_PATH}/clear-all-data`, async (c) => {
       await kv.del(plan.id);
     }
 
-    console.log('All data cleared successfully');
+    console.log(`All data cleared successfully. Document files deleted: ${deletedFiles}, Failed: ${failedFiles}`);
     return c.json({
       success: true,
-      message: 'All data cleared successfully',
+      message: `All data cleared successfully. Document files deleted: ${deletedFiles}, Failed: ${failedFiles}`,
       cleared: {
         users: deletedUsers,
         devices: allDevices.length,
         checks: allChecks.length,
         documents: allDocuments.length,
-        plans: allPlans.length
+        plans: allPlans.length,
+        filesDeleted: deletedFiles,
+        filesFailed: failedFiles
       }
     });
   } catch (error) {

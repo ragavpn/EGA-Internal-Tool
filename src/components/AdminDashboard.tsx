@@ -311,11 +311,6 @@ export function AdminDashboard({ admin, onLogout }: AdminDashboardProps) {
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (passwordData.oldPassword !== 'egainternaltool2025') {
-      toast.error('Current password is incorrect');
-      return;
-    }
-
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       toast.error('New passwords do not match');
       return;
@@ -326,10 +321,69 @@ export function AdminDashboard({ admin, onLogout }: AdminDashboardProps) {
       return;
     }
 
-    // In a real app, you would update this in a secure backend
-    toast.success('Password would be changed in a real implementation');
-    setShowChangePassword(false);
-    setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
+    try {
+      const response = await fetch(
+        `${functionsBase(projectId)}/admin/change-password`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${publicAnonKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            currentPassword: passwordData.oldPassword,
+            newPassword: passwordData.newPassword
+          })
+        }
+      );
+
+      if (response.ok) {
+        const result = await response.json();
+        toast.success(result.message || 'Password change requested. Please update the ADMIN_PASSWORD environment variable.');
+        setShowChangePassword(false);
+        setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.error || 'Failed to change password');
+      }
+    } catch (error) {
+      console.error('Error changing password:', error);
+      toast.error('Failed to change password. Please try again.');
+    }
+  };
+
+  const handleDeleteDocument = async (document: any) => {
+    try {
+      const response = await fetch(
+        `${functionsBase(projectId)}/documents/${document.id}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${publicAnonKey}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (response.ok) {
+        const result = await response.json();
+        setDocuments(prev => prev.filter(doc => doc.id !== document.id));
+
+        if (result.fileDeleted) {
+          toast.success('Document and file deleted successfully');
+        } else if (result.fileError) {
+          toast.success(`Document deleted from database, but file deletion failed: ${result.fileError}`);
+        } else {
+          toast.success('Document deleted successfully');
+        }
+      } else {
+        const error = await response.json();
+        toast.error(error.error || 'Failed to delete document');
+      }
+    } catch (error) {
+      console.error('Error deleting document:', error);
+      toast.error('Failed to delete document');
+    }
   };
 
   const handleDownloadDocument = async (document: any) => {
@@ -609,6 +663,14 @@ export function AdminDashboard({ admin, onLogout }: AdminDashboardProps) {
                             >
                               <Download className="h-3 w-3" />
                             </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteDocument(document)}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
                           </div>
                         </div>
                       ))
@@ -650,6 +712,14 @@ export function AdminDashboard({ admin, onLogout }: AdminDashboardProps) {
                               onClick={() => handleDownloadDocument(document)}
                             >
                               <Download className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteDocument(document)}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-3 w-3" />
                             </Button>
                           </div>
                         </div>

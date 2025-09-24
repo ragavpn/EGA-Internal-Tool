@@ -248,7 +248,7 @@ export function AuthScreen({ onUserLogin, onAdminLogin }: AuthScreenProps) {
 
     try {
       // Use environment variable if set, otherwise construct production URL
-      const redirectTo = import.meta.env.VITE_AUTH_REDIRECT_URL || 
+      const redirectTo = import.meta.env.VITE_AUTH_REDIRECT_URL ||
         (import.meta.env.PROD ? 'https://ega-internal-tool.vercel.app' : window.location.origin);
 
       const { error } = await supabase.auth.signInWithOAuth({
@@ -392,16 +392,45 @@ export function AuthScreen({ onUserLogin, onAdminLogin }: AuthScreenProps) {
         return;
       }
 
-      // Check admin credentials
-      if (adminFormData.username === 'admin' && adminFormData.password === 'egainternaltool2025') {
-        onAdminLogin({ username: adminFormData.username, isAdmin: true });
+      // Authenticate admin credentials via server
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      const response = await fetch(
+        `${functionsBase(projectId)}/admin/auth`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${publicAnonKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            username: adminFormData.username,
+            password: adminFormData.password
+          }),
+          signal: controller.signal
+        }
+      );
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const { admin } = await response.json();
+        onAdminLogin(admin);
         toast.success('Admin signed in successfully!');
       } else {
-        toast.error('Invalid admin credentials');
+        const errorData = await response.json();
+        toast.error(errorData.error || 'Invalid admin credentials');
       }
     } catch (error: any) {
       console.error('Admin sign in error:', error);
-      toast.error('Failed to sign in as admin');
+      if (error.name === 'AbortError') {
+        toast.error('Request timeout. Please check your connection and try again.');
+      } else if (error.message?.includes('Failed to fetch')) {
+        toast.error('Unable to connect to server. Please check your connection and try again.');
+      } else {
+        toast.error('Failed to sign in as admin');
+      }
     } finally {
       setIsLoading(false);
     }
