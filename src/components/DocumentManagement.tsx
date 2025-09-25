@@ -8,7 +8,7 @@ import { Badge } from './ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { Upload, Download, FileText, PenTool, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { Upload, Download, FileText, PenTool, Clock, CheckCircle, AlertCircle, Search, SortAsc, SortDesc, User, Hash } from 'lucide-react';
 import { toast } from "sonner";
 import { AppUser } from '../App';
 
@@ -43,6 +43,10 @@ export function DocumentManagement({ user }: DocumentManagementProps) {
   const [selectedDocumentForSigning, setSelectedDocumentForSigning] = useState<Document | null>(null);
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [isSignDialogOpen, setIsSignDialogOpen] = useState(false);
+  const [employeeSearchTerm, setEmployeeSearchTerm] = useState('');
+  const [employeeSortBy, setEmployeeSortBy] = useState<'name' | 'employeeId'>('name');
+  const [employeeSortOrder, setEmployeeSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [showEmployeeDropdown, setShowEmployeeDropdown] = useState(false);
 
   useEffect(() => {
     fetchDocuments();
@@ -97,6 +101,27 @@ export function DocumentManagement({ user }: DocumentManagementProps) {
       toast.error('Failed to load employees for assignment');
       setLoading(false);
     }
+  };
+
+  // Helper function for employee selection with search and sort
+  const getFilteredAndSortedEmployees = () => {
+    let filteredUsers = users.filter(u => u.employeeId !== user.employeeId).filter(employee =>
+      employee.name.toLowerCase().includes(employeeSearchTerm.toLowerCase()) ||
+      employee.employeeId.toLowerCase().includes(employeeSearchTerm.toLowerCase())
+    );
+
+    filteredUsers.sort((a, b) => {
+      let aValue = employeeSortBy === 'name' ? a.name : a.employeeId;
+      let bValue = employeeSortBy === 'name' ? b.name : b.employeeId;
+
+      if (employeeSortOrder === 'asc') {
+        return aValue.localeCompare(bValue);
+      } else {
+        return bValue.localeCompare(aValue);
+      }
+    });
+
+    return filteredUsers;
   };
 
   const handleFileUpload = async (e: React.FormEvent) => {
@@ -288,18 +313,99 @@ export function DocumentManagement({ user }: DocumentManagementProps) {
                 <p className="text-xs text-gray-600">Only PDF files are accepted</p>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <Label htmlFor="assign-to">Assign to Employee</Label>
-                <Select value={assignedTo} onValueChange={setAssignedTo} required>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select employee for signature" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {users.filter(u => u.employeeId !== user.employeeId).map(user => (
-                      <SelectItem key={user.employeeId} value={user.employeeId}>
-                        {user.name} ({user.employeeId})
+
+                {/* Search and Sort Controls */}
+                <div className="flex gap-2">
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      type="text"
+                      placeholder="Search Employees..."
+                      value={employeeSearchTerm}
+                      onChange={(e) => setEmployeeSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+
+                  <Select value={employeeSortBy} onValueChange={(value: 'name' | 'employeeId') => setEmployeeSortBy(value)}>
+                    <SelectTrigger className="w-28">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="name">
+                        <div className="flex items-center gap-2">
+                          <User className="h-4 w-4" />
+                          Name
+                        </div>
                       </SelectItem>
-                    ))}
+                      <SelectItem value="employeeId">
+                        <div className="flex items-center gap-2">
+                          <Hash className="h-4 w-4" />
+                          ID
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setEmployeeSortOrder(employeeSortOrder === 'asc' ? 'desc' : 'asc')}
+                  >
+                    {employeeSortOrder === 'asc' ? <SortAsc className="h-4 w-4" /> : <SortDesc className="h-4 w-4" />}
+                  </Button>
+                </div>
+
+                {/* Employee Selection */}
+                <Select value={assignedTo} onValueChange={setAssignedTo} required>
+                  <SelectTrigger className="h-auto min-h-[3rem] px-4 py-3">
+                    <SelectValue placeholder="Select employee for signature">
+                      {assignedTo && (() => {
+                        const selectedEmployee = users.find(u => u.employeeId === assignedTo);
+                        return selectedEmployee ? (
+                          <div className="flex items-center gap-3 py-1">
+                            <div className="flex-1">
+                              <div className="font-medium text-left">{selectedEmployee.name}</div>
+                              <div className="text-xs text-gray-500 flex items-center gap-2 text-left">
+                                <span className="flex items-center gap-1">
+                                  <Hash className="h-3 w-3" />
+                                  {selectedEmployee.employeeId}
+                                </span>
+                                <span>{selectedEmployee.email}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ) : assignedTo;
+                      })()}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent className="max-h-60">
+                    {getFilteredAndSortedEmployees().length > 0 ? (
+                      getFilteredAndSortedEmployees().map(employee => (
+                        <SelectItem key={employee.employeeId} value={employee.employeeId}>
+                          <div className="flex items-center gap-3 py-2 px-2">
+                            <div className="flex-1">
+                              <div className="font-medium">{employee.name}</div>
+                              <div className="text-xs text-gray-500 flex items-center gap-2">
+                                <span className="flex items-center gap-1">
+                                  <Hash className="h-3 w-3" />
+                                  {employee.employeeId}
+                                </span>
+                                <span>{employee.email}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <div className="p-4 text-center text-gray-500">
+                        <Search className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+                        <p>No employees found</p>
+                      </div>
+                    )}
                   </SelectContent>
                 </Select>
               </div>

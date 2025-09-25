@@ -28,6 +28,7 @@ export function DeviceManagement() {
   const [locationFilter, setLocationFilter] = useState('all');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
   const [newDevice, setNewDevice] = useState({
     name: '',
     identificationNumber: '',
@@ -59,7 +60,7 @@ export function DeviceManagement() {
 
       if (response.ok) {
         const deviceData = await response.json();
-        
+
         // Fetch last check information for each device
         const devicesWithCheckInfo = await Promise.all(
           deviceData.map(async (device: Device) => {
@@ -73,7 +74,7 @@ export function DeviceManagement() {
                   }
                 }
               );
-              
+
               if (checkResponse.ok) {
                 const checkInfo = await checkResponse.json();
                 return {
@@ -87,7 +88,7 @@ export function DeviceManagement() {
             } catch (error) {
               console.error(`Error fetching check info for device ${device.id}:`, error);
             }
-            
+
             return {
               ...device,
               hasBeenChecked: false,
@@ -95,7 +96,7 @@ export function DeviceManagement() {
             } as DeviceWithCheckInfo;
           })
         );
-        
+
         setDevices(devicesWithCheckInfo);
       } else {
         toast.error('Failed to fetch devices');
@@ -132,8 +133,10 @@ export function DeviceManagement() {
 
   const handleAddDevice = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
+      setIsAdding(true);
+
       // Validate required fields
       if (!newDevice.name || !newDevice.identificationNumber || !newDevice.location) {
         toast.error('Name, identification number, and location are required');
@@ -165,7 +168,7 @@ export function DeviceManagement() {
           hasBeenChecked: false,
           totalChecksCompleted: 0
         } as DeviceWithCheckInfo;
-        
+
         setDevices([...devices, deviceWithCheckInfo]);
         setNewDevice({
           name: '',
@@ -183,6 +186,8 @@ export function DeviceManagement() {
     } catch (error) {
       console.error('Error adding device:', error);
       toast.error('Failed to add device');
+    } finally {
+      setIsAdding(false);
     }
   };
 
@@ -196,7 +201,7 @@ export function DeviceManagement() {
   const handleDeleteDevice = async (device: DeviceWithCheckInfo) => {
     try {
       setIsDeleting(true);
-      
+
       const response = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-354d5d14/devices/${device.id}`,
         {
@@ -245,7 +250,7 @@ export function DeviceManagement() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <h1 className="text-2xl">Device Management</h1>
-        
+
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
             <Button>
@@ -260,7 +265,7 @@ export function DeviceManagement() {
                 Register a new device for maintenance tracking
               </DialogDescription>
             </DialogHeader>
-            
+
             <form onSubmit={handleAddDevice} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="device-name">Device Name</Label>
@@ -272,7 +277,7 @@ export function DeviceManagement() {
                   required
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="device-id">Identification Number</Label>
                 <Input
@@ -283,7 +288,7 @@ export function DeviceManagement() {
                   required
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="device-location">Location</Label>
                 <Input
@@ -294,7 +299,7 @@ export function DeviceManagement() {
                   required
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="device-frequency">Check Frequency (weeks)</Label>
                 <Input
@@ -307,7 +312,7 @@ export function DeviceManagement() {
                   required
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="device-comment">Plan Comment (Optional)</Label>
                 <Textarea
@@ -318,15 +323,16 @@ export function DeviceManagement() {
                   rows={3}
                 />
               </div>
-              
+
               <div className="flex gap-2 pt-4">
-                <Button type="submit" className="flex-1">
-                  Add Device
+                <Button type="submit" className="flex-1" disabled={isAdding}>
+                  {isAdding ? 'Adding Device...' : 'Add Device'}
                 </Button>
-                <Button 
-                  type="button" 
-                  variant="outline" 
+                <Button
+                  type="button"
+                  variant="outline"
                   onClick={() => setIsAddDialogOpen(false)}
+                  disabled={isAdding}
                 >
                   Cancel
                 </Button>
@@ -347,7 +353,7 @@ export function DeviceManagement() {
             className="pl-10"
           />
         </div>
-        
+
         <Select value={locationFilter} onValueChange={setLocationFilter}>
           <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder="Filter by location" />
@@ -383,7 +389,7 @@ export function DeviceManagement() {
           </div>
           <h3 className="text-lg mb-2">No devices found</h3>
           <p className="text-gray-600 mb-4">
-            {searchTerm || locationFilter !== 'all' 
+            {searchTerm || locationFilter !== 'all'
               ? 'Try adjusting your search or filter criteria.'
               : 'Get started by adding your first device.'
             }
@@ -405,24 +411,24 @@ export function DeviceManagement() {
                   <Badge variant="outline">{device.status}</Badge>
                 </div>
               </CardHeader>
-              
+
               <CardContent className="space-y-3">
                 <div className="flex items-center text-sm text-gray-600">
                   <Settings className="h-4 w-4 mr-2" />
                   {device.identificationNumber}
                 </div>
-                
+
                 <div className="flex items-center text-sm text-gray-600">
                   <MapPin className="h-4 w-4 mr-2" />
                   {device.location}
                 </div>
-                
+
                 <div className="pt-2 border-t border-gray-100">
                   <p className="text-sm">
                     <span className="text-gray-600">Check frequency:</span>{' '}
                     Every {device.plannedFrequency} week{device.plannedFrequency > 1 ? 's' : ''}
                   </p>
-                  
+
                   {device.planComment && (
                     <p className="text-sm text-gray-600 mt-2">
                       <span className="text-gray-800">Note:</span> {device.planComment}
@@ -461,12 +467,12 @@ export function DeviceManagement() {
                     </div>
                   )}
                 </div>
-                
+
                 <div className="flex items-center justify-between pt-2 border-t border-gray-100">
                   <div className="text-xs text-gray-500">
                     Added {new Date(device.createdAt).toLocaleDateString()}
                   </div>
-                  
+
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button

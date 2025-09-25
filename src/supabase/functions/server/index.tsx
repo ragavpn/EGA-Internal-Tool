@@ -4,6 +4,10 @@ import { logger } from 'hono/logger';
 import { createClient } from '@supabase/supabase-js';
 import * as kv from './kv_store';
 
+// Import Resend for email sending
+// @ts-ignore - npm: imports are handled by Deno
+import { Resend } from 'npm:resend';
+
 // Helper to get env vars in either Deno or Node environments.
 const getEnv = (key: string): string | undefined => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -30,6 +34,9 @@ const supabase = createClient(
   getEnv('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 );
 
+// Initialize Resend client for email sending
+const resend = new Resend(getEnv('RESEND_API_KEY') ?? '');
+
 // Get environment-based configuration
 const KV_TABLE_NAME = getEnv('KV_TABLE_NAME') || 'kv_store_354d5d14';
 const EDGE_FN_NAME = getEnv('EDGE_FN_NAME') || 'make-server-354d5d14';
@@ -42,6 +49,124 @@ function getWeekNumber(date: Date): number {
   tempDate.setDate(tempDate.getDate() + 3 - (tempDate.getDay() + 6) % 7);
   const week1 = new Date(tempDate.getFullYear(), 0, 4);
   return 1 + Math.round(((tempDate.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+}
+
+// Helper function to generate HTML email template for delayed device notifications
+function generateDelayedDeviceEmailHTML(delayedChecks: any[]): string {
+  const totalDelayed = delayedChecks.length;
+  const criticalDevices = delayedChecks.filter(check => check.daysOverdue > 14);
+  const moderateDevices = delayedChecks.filter(check => check.daysOverdue > 7 && check.daysOverdue <= 14);
+  const recentDevices = delayedChecks.filter(check => check.daysOverdue <= 7);
+
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Weekly Delayed Device Check Report</title>
+        <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px; text-align: center; margin-bottom: 30px; }
+            .summary { background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 30px; }
+            .summary-item { display: inline-block; margin: 10px 20px; text-align: center; }
+            .summary-number { font-size: 2em; font-weight: bold; color: #667eea; }
+            .summary-label { font-size: 0.9em; color: #666; }
+            .section { margin-bottom: 30px; }
+            .section-title { font-size: 1.2em; font-weight: bold; margin-bottom: 15px; padding-bottom: 5px; border-bottom: 2px solid #eee; }
+            .device-item { background: white; border: 1px solid #ddd; border-radius: 6px; padding: 15px; margin-bottom: 10px; }
+            .device-name { font-weight: bold; color: #333; margin-bottom: 5px; }
+            .device-details { font-size: 0.9em; color: #666; }
+            .badge { padding: 3px 8px; border-radius: 12px; font-size: 0.8em; font-weight: bold; }
+            .badge-critical { background: #fee2e2; color: #dc2626; }
+            .badge-moderate { background: #fef3c7; color: #d97706; }
+            .badge-recent { background: #dbeafe; color: #2563eb; }
+            .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; color: #666; font-size: 0.9em; }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>🚨 Weekly Delayed Device Check Report</h1>
+            <p>Automated Report - ${new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  })}</p>
+        </div>
+
+        <div class="summary">
+            <h2>📊 Summary</h2>
+            <div class="summary-item">
+                <div class="summary-number" style="color: #dc2626;">${criticalDevices.length}</div>
+                <div class="summary-label">Critical (>14 days)</div>
+            </div>
+            <div class="summary-item">
+                <div class="summary-number" style="color: #d97706;">${moderateDevices.length}</div>
+                <div class="summary-label">Moderate (7-14 days)</div>
+            </div>
+            <div class="summary-item">
+                <div class="summary-number" style="color: #2563eb;">${recentDevices.length}</div>
+                <div class="summary-label">Recent (≤7 days)</div>
+            </div>
+        </div>
+
+        ${criticalDevices.length > 0 ? `
+        <div class="section">
+            <div class="section-title" style="color: #dc2626;">🔴 Critical Devices (${criticalDevices.length} devices)</div>
+            ${criticalDevices.map(check => `
+                <div class="device-item" style="border-left: 4px solid #dc2626;">
+                    <div class="device-name">${check.device?.name || 'Unknown Device'}</div>
+                    <div class="device-details">
+                        <strong>Location:</strong> ${check.device?.location || 'Unknown'} | 
+                        <strong>Overdue:</strong> <span class="badge badge-critical">${check.daysOverdue} days</span> | 
+                        <strong>Last Scheduled:</strong> ${new Date(check.scheduledDate).toLocaleDateString()}
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+        ` : ''}
+
+        ${moderateDevices.length > 0 ? `
+        <div class="section">
+            <div class="section-title" style="color: #d97706;">🟡 Moderate Devices (${moderateDevices.length} devices)</div>
+            ${moderateDevices.map(check => `
+                <div class="device-item" style="border-left: 4px solid #d97706;">
+                    <div class="device-name">${check.device?.name || 'Unknown Device'}</div>
+                    <div class="device-details">
+                        <strong>Location:</strong> ${check.device?.location || 'Unknown'} | 
+                        <strong>Overdue:</strong> <span class="badge badge-moderate">${check.daysOverdue} days</span> | 
+                        <strong>Last Scheduled:</strong> ${new Date(check.scheduledDate).toLocaleDateString()}
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+        ` : ''}
+
+        ${recentDevices.length > 0 ? `
+        <div class="section">
+            <div class="section-title" style="color: #2563eb;">🔵 Recent Devices (${recentDevices.length} devices)</div>
+            ${recentDevices.map(check => `
+                <div class="device-item" style="border-left: 4px solid #2563eb;">
+                    <div class="device-name">${check.device?.name || 'Unknown Device'}</div>
+                    <div class="device-details">
+                        <strong>Location:</strong> ${check.device?.location || 'Unknown'} | 
+                        <strong>Overdue:</strong> <span class="badge badge-recent">${check.daysOverdue} days</span> | 
+                        <strong>Last Scheduled:</strong> ${new Date(check.scheduledDate).toLocaleDateString()}
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+        ` : ''}
+
+        <div class="footer">
+            <p>This is an automated weekly report generated by the EGA Internal Tool.</p>
+            <p>Please log in to the system to complete overdue device checks.</p>
+            <p><em>Report generated on ${new Date().toLocaleString()}</em></p>
+        </div>
+    </body>
+    </html>
+  `;
 }
 
 // Create storage bucket on startup
@@ -1289,6 +1414,146 @@ app.delete(`${BASE_PATH}/notifications/:employeeId/clear`, async (c) => {
   }
 });
 
+// Delayed Device Notifications
+app.get(`${BASE_PATH}/delayed-device-notifications`, async (c) => {
+  try {
+    console.log('Fetching delayed device notification settings');
+
+    // Get notification settings from KV store
+    const notificationSettings = await kv.get('delayed-device-notifications') || { selectedEmployees: [] };
+
+    console.log('Retrieved notification settings:', notificationSettings);
+    return c.json(notificationSettings);
+  } catch (error) {
+    console.log('Error fetching delayed device notification settings:', error);
+    return c.json({ error: 'Failed to fetch notification settings' }, 500);
+  }
+});
+
+app.post(`${BASE_PATH}/delayed-device-notifications`, async (c) => {
+  try {
+    const body = await c.req.json();
+    const { selectedEmployees } = body;
+
+    console.log('Saving delayed device notification settings:', { selectedEmployees });
+
+    // Validate input
+    if (!Array.isArray(selectedEmployees)) {
+      return c.json({ error: 'selectedEmployees must be an array' }, 400);
+    }
+
+    const notificationSettings = { selectedEmployees };
+
+    // Save to KV store
+    await kv.set('delayed-device-notifications', notificationSettings);
+
+    console.log('Successfully saved notification settings');
+    return c.json({ success: true, settings: notificationSettings });
+  } catch (error) {
+    console.log('Error saving delayed device notification settings:', error);
+    return c.json({ error: 'Failed to save notification settings' }, 500);
+  }
+});
+
+// Vercel Cron Job Endpoint for Weekly Delayed Device Notifications
+app.post(`${BASE_PATH}/vercel-cron-delayed-notifications`, async (c) => {
+  try {
+    console.log('Vercel cron job triggered - Weekly delayed device notifications');
+
+    // Get notification settings
+    const notificationSettings = await kv.get('delayed-device-notifications') || { selectedEmployees: [] };
+    console.log('Notification settings:', notificationSettings);
+
+    if (!notificationSettings.selectedEmployees || notificationSettings.selectedEmployees.length === 0) {
+      console.log('No employees selected for notifications');
+      return c.json({ success: true, message: 'No employees selected for notifications' });
+    }
+
+    // Get delayed device checks
+    const delayedChecks = await getDelayedChecks();
+    console.log('Found delayed checks:', delayedChecks.length);
+
+    if (delayedChecks.length === 0) {
+      console.log('No delayed devices found');
+      return c.json({ success: true, message: 'No delayed devices found' });
+    }
+
+    // Get devices data
+    const devices = await getAllDevices();
+
+    // Get selected employee emails
+    const { data: authData, error: authError } = await supabase.auth.admin.listUsers();
+    if (authError) {
+      console.error('Error fetching auth users:', authError);
+      return c.json({ error: 'Failed to fetch users' }, 500);
+    }
+
+    const selectedEmployees = authData?.users?.filter((u: any) =>
+      notificationSettings.selectedEmployees.includes(u.user_metadata?.employeeId)
+    ) || [];
+
+    if (selectedEmployees.length === 0) {
+      console.log('No valid employees found for notification');
+      return c.json({ success: true, message: 'No valid employees found for notification' });
+    }
+
+    // Prepare email data
+    const emailData = {
+      recipients: selectedEmployees.map((emp: any) => emp.email),
+      delayedChecks: delayedChecks.map(check => ({
+        ...check,
+        device: devices[check.deviceId],
+        daysOverdue: Math.floor((Date.now() - new Date(check.scheduledDate).getTime()) / (1000 * 60 * 60 * 24))
+      }))
+    };
+
+    console.log('Sending emails to:', emailData.recipients);
+    console.log('Email data prepared with', emailData.delayedChecks.length, 'delayed checks');
+
+    // Generate email HTML content
+    const emailHtml = generateDelayedDeviceEmailHTML(emailData.delayedChecks);
+
+    // Send emails using Resend
+    const emailResults = [];
+    for (const recipient of emailData.recipients) {
+      try {
+        const emailResult = await resend.emails.send({
+          from: 'EGA Internal Tool <onboarding@resend.dev>',
+          to: recipient,
+          subject: `🚨 Weekly Delayed Device Report - ${emailData.delayedChecks.length} Overdue Devices`,
+          html: emailHtml,
+        });
+
+        emailResults.push({ recipient, success: true, id: emailResult.data?.id });
+        console.log(`Email sent successfully to ${recipient}:`, emailResult.data?.id);
+      } catch (emailError) {
+        console.error(`Failed to send email to ${recipient}:`, emailError);
+        emailResults.push({ recipient, success: false, error: emailError.message });
+      }
+    }
+
+    const successfulEmails = emailResults.filter(result => result.success);
+    const failedEmails = emailResults.filter(result => !result.success);
+
+    return c.json({
+      success: true,
+      message: `Delayed device notifications sent`,
+      summary: {
+        totalDelayedDevices: emailData.delayedChecks.length,
+        emailsSent: successfulEmails.length,
+        emailsFailed: failedEmails.length,
+        recipients: emailData.recipients
+      },
+      emailResults,
+      emailData
+    });
+
+  } catch (error) {
+    console.error('Error in Vercel cron job:', error);
+    return c.json({ error: 'Failed to process cron job' }, 500);
+  }
+});
+
 // Clear all data endpoint (for fresh start)
 app.delete(`${BASE_PATH}/clear-all-data`, async (c) => {
   try {
@@ -1471,10 +1736,39 @@ app.delete(`${BASE_PATH}/cleanup-sample-data`, async (c) => {
   }
 });
 
+// Helper function to get delayed checks
+async function getDelayedChecks() {
+  const allChecks = await kv.getByPrefix('check:');
+  const currentDate = new Date();
+  const currentYear = currentDate.getFullYear();
+  const currentWeek = getWeekNumber(currentDate);
+
+  return allChecks.filter(check => {
+    if (check.status !== 'pending') return false;
+
+    const checkYear = parseInt(check.year);
+    const checkWeek = parseInt(check.week);
+
+    // If check is from previous week or earlier
+    return checkYear < currentYear ||
+      (checkYear === currentYear && checkWeek < currentWeek);
+  });
+}// Helper function to get all devices
+async function getAllDevices() {
+  const deviceList = await kv.getByPrefix('device:');
+  const devicesMap: { [key: string]: any } = {};
+
+  for (const device of deviceList) {
+    devicesMap[device.id] = device;
+  }
+
+  return devicesMap;
+}
+
 // Start the server
 // In Deno deploy environments (e.g., Supabase Edge Functions) use Deno.serve.
 // In other environments (local dev, Node) export the app so it can be used
-// by a different runner. This keeps the file free of unresolved global
+// by a different runner. This keeps the file free of un  olved global
 // references in TypeScript while remaining deployable under Deno.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const anyGlobal: any = typeof globalThis !== 'undefined' ? globalThis : undefined;

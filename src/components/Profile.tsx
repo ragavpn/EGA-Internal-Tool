@@ -35,6 +35,8 @@ export function Profile({ user, onUserLogout, onUserUpdate }: ProfileProps) {
   });
   const [loading, setLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deletingDocument, setDeletingDocument] = useState<string | null>(null);
+  const [changingPassword, setChangingPassword] = useState(false);
   const [showSecondConfirmation, setShowSecondConfirmation] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
@@ -81,6 +83,7 @@ export function Profile({ user, onUserLogout, onUserUpdate }: ProfileProps) {
 
   const handleDeleteDocument = async (document: any) => {
     try {
+      setDeletingDocument(document.id);
       const response = await fetch(
         `${functionsBase(projectId)}/documents/${document.id}`,
         {
@@ -115,6 +118,8 @@ export function Profile({ user, onUserLogout, onUserUpdate }: ProfileProps) {
     } catch (error) {
       console.error('Error deleting document:', error);
       toast.error('Failed to delete document');
+    } finally {
+      setDeletingDocument(null);
     }
   };
 
@@ -166,6 +171,8 @@ export function Profile({ user, onUserLogout, onUserUpdate }: ProfileProps) {
     }
 
     try {
+      setChangingPassword(true);
+
       // Update password in Supabase
       const { error } = await supabase.auth.updateUser({
         password: passwordData.newPassword
@@ -182,6 +189,8 @@ export function Profile({ user, onUserLogout, onUserUpdate }: ProfileProps) {
     } catch (error) {
       console.error('Error updating password:', error);
       toast.error('Failed to update password');
+    } finally {
+      setChangingPassword(false);
     }
   };
 
@@ -614,9 +623,14 @@ export function Profile({ user, onUserLogout, onUserUpdate }: ProfileProps) {
                               variant="outline"
                               size="sm"
                               onClick={() => handleDeleteDocument(document)}
+                              disabled={deletingDocument === document.id}
                               className="text-red-600 hover:text-red-700 hover:bg-red-50"
                             >
-                              <Trash2 className="h-3 w-3" />
+                              {deletingDocument === document.id ? (
+                                'Deleting...'
+                              ) : (
+                                <Trash2 className="h-3 w-3" />
+                              )}
                             </Button>
                           )}
                         </div>
@@ -676,14 +690,21 @@ export function Profile({ user, onUserLogout, onUserUpdate }: ProfileProps) {
               </div>
             </div>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => {
-                setShowChangePassword(false);
-                setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
-              }}>
+              <AlertDialogCancel
+                onClick={() => {
+                  setShowChangePassword(false);
+                  setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
+                }}
+                disabled={changingPassword}
+              >
                 Cancel
               </AlertDialogCancel>
-              <AlertDialogAction type="submit" className="bg-blue-600 hover:bg-blue-700">
-                Change Password
+              <AlertDialogAction
+                type="submit"
+                className="bg-blue-600 hover:bg-blue-700"
+                disabled={changingPassword}
+              >
+                {changingPassword ? 'Changing Password...' : 'Change Password'}
               </AlertDialogAction>
             </AlertDialogFooter>
           </form>

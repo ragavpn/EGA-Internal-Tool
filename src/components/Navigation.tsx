@@ -6,6 +6,7 @@ import { Badge } from './ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Card } from './ui/card';
 import { Separator } from './ui/separator';
+import { toast } from "sonner";
 import {
   Home,
   Settings,
@@ -21,7 +22,6 @@ import {
   User
 } from 'lucide-react';
 import { AppUser, Notification } from '../App';
-import { toast } from "sonner";
 
 interface NavigationProps {
   user: AppUser;
@@ -36,6 +36,8 @@ export function Navigation({ user, currentView, onViewChange, onUserLogout, side
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [delayedDevicesCount, setDelayedDevicesCount] = useState(0);
+  const [markingAllAsRead, setMarkingAllAsRead] = useState(false);
+  const [clearingHistory, setClearingHistory] = useState(false);
 
   useEffect(() => {
     fetchNotifications();
@@ -116,6 +118,7 @@ export function Navigation({ user, currentView, onViewChange, onUserLogout, side
 
   const markAllNotificationsAsRead = async () => {
     try {
+      setMarkingAllAsRead(true);
       const response = await fetch(
         `${functionsBase(projectId)}/notifications/${user.employeeId}/read-all`,
         {
@@ -130,14 +133,21 @@ export function Navigation({ user, currentView, onViewChange, onUserLogout, side
       if (response.ok) {
         setNotifications(prev => prev.map(n => ({ ...n, read: true })));
         setUnreadCount(0);
+        toast.success('All notifications marked as read');
+      } else {
+        toast.error('Failed to mark notifications as read');
       }
     } catch (error) {
       console.error('Error marking all notifications as read:', error);
+      toast.error('Failed to mark notifications as read');
+    } finally {
+      setMarkingAllAsRead(false);
     }
   };
 
   const clearNotificationHistory = async () => {
     try {
+      setClearingHistory(true);
       const response = await fetch(
         `${functionsBase(projectId)}/notifications/${user.employeeId}/clear`,
         {
@@ -153,10 +163,14 @@ export function Navigation({ user, currentView, onViewChange, onUserLogout, side
         setNotifications([]);
         setUnreadCount(0);
         toast.success('Notification history cleared');
+      } else {
+        toast.error('Failed to clear notification history');
       }
     } catch (error) {
       console.error('Error clearing notification history:', error);
       toast.error('Failed to clear notification history');
+    } finally {
+      setClearingHistory(false);
     }
   };
 
@@ -226,9 +240,10 @@ export function Navigation({ user, currentView, onViewChange, onUserLogout, side
                           variant="ghost"
                           size="sm"
                           onClick={markAllNotificationsAsRead}
+                          disabled={markingAllAsRead}
                           className="text-xs h-6 px-2"
                         >
-                          Mark all read
+                          {markingAllAsRead ? 'Marking...' : 'Mark all read'}
                         </Button>
                       )}
                       {notifications.length > 0 && (
@@ -236,9 +251,10 @@ export function Navigation({ user, currentView, onViewChange, onUserLogout, side
                           variant="ghost"
                           size="sm"
                           onClick={clearNotificationHistory}
+                          disabled={clearingHistory}
                           className="text-xs h-6 px-2 text-red-600 hover:text-red-700"
                         >
-                          Clear history
+                          {clearingHistory ? 'Clearing...' : 'Clear history'}
                         </Button>
                       )}
                     </div>

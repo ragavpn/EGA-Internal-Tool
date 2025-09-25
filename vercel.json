@@ -8,5 +8,11 @@
             "src": "/.*",
             "dest": "/"
         }
+    ],
+    "crons": [
+        {
+            "path": "/api/cron/delayed-notifications",
+            "schedule": "0 3 * * 1"
+        }
     ]
 }

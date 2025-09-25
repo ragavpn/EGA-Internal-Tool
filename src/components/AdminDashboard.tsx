@@ -44,6 +44,8 @@ export function AdminDashboard({ admin, onLogout }: AdminDashboardProps) {
   const [clearingUsers, setClearingUsers] = useState(false);
   const [clearingDevices, setClearingDevices] = useState(false);
   const [clearingDocuments, setClearingDocuments] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [deletingDocument, setDeletingDocument] = useState<string | null>(null);
   const [showClearUsersConfirmation, setShowClearUsersConfirmation] = useState(false);
   const [showClearDevicesConfirmation, setShowClearDevicesConfirmation] = useState(false);
   const [showClearDocumentsConfirmation, setShowClearDocumentsConfirmation] = useState(false);
@@ -322,6 +324,7 @@ export function AdminDashboard({ admin, onLogout }: AdminDashboardProps) {
     }
 
     try {
+      setChangingPassword(true);
       const response = await fetch(
         `${functionsBase(projectId)}/admin/change-password`,
         {
@@ -349,11 +352,14 @@ export function AdminDashboard({ admin, onLogout }: AdminDashboardProps) {
     } catch (error) {
       console.error('Error changing password:', error);
       toast.error('Failed to change password. Please try again.');
+    } finally {
+      setChangingPassword(false);
     }
   };
 
   const handleDeleteDocument = async (document: any) => {
     try {
+      setDeletingDocument(document.id);
       const response = await fetch(
         `${functionsBase(projectId)}/documents/${document.id}`,
         {
@@ -383,6 +389,8 @@ export function AdminDashboard({ admin, onLogout }: AdminDashboardProps) {
     } catch (error) {
       console.error('Error deleting document:', error);
       toast.error('Failed to delete document');
+    } finally {
+      setDeletingDocument(null);
     }
   };
 
@@ -667,9 +675,14 @@ export function AdminDashboard({ admin, onLogout }: AdminDashboardProps) {
                               variant="outline"
                               size="sm"
                               onClick={() => handleDeleteDocument(document)}
+                              disabled={deletingDocument === document.id}
                               className="text-red-600 hover:text-red-700 hover:bg-red-50"
                             >
-                              <Trash2 className="h-3 w-3" />
+                              {deletingDocument === document.id ? (
+                                'Deleting...'
+                              ) : (
+                                <Trash2 className="h-3 w-3" />
+                              )}
                             </Button>
                           </div>
                         </div>
@@ -717,9 +730,14 @@ export function AdminDashboard({ admin, onLogout }: AdminDashboardProps) {
                               variant="outline"
                               size="sm"
                               onClick={() => handleDeleteDocument(document)}
+                              disabled={deletingDocument === document.id}
                               className="text-red-600 hover:text-red-700 hover:bg-red-50"
                             >
-                              <Trash2 className="h-3 w-3" />
+                              {deletingDocument === document.id ? (
+                                'Deleting...'
+                              ) : (
+                                <Trash2 className="h-3 w-3" />
+                              )}
                             </Button>
                           </div>
                         </div>
@@ -1037,10 +1055,13 @@ export function AdminDashboard({ admin, onLogout }: AdminDashboardProps) {
                   setShowChangePassword(false);
                   setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
                 }}
+                disabled={changingPassword}
               >
                 Cancel
               </Button>
-              <Button type="submit">Change Password</Button>
+              <Button type="submit" disabled={changingPassword}>
+                {changingPassword ? 'Changing Password...' : 'Change Password'}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
