@@ -1528,7 +1528,7 @@ app.post(`${BASE_PATH}/vercel-cron-delayed-notifications`, async (c) => {
         console.log(`Email sent successfully to ${recipient}:`, emailResult.data?.id);
       } catch (emailError) {
         console.error(`Failed to send email to ${recipient}:`, emailError);
-        emailResults.push({ recipient, success: false, error: emailError.message });
+        emailResults.push({ recipient, success: false, error: emailError instanceof Error ? emailError.message : String(emailError) });
       }
     }
 
