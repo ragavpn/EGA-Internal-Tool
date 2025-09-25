@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { createClient } from '@supabase/supabase-js';
-import * as kv from './kv_store';
+import * as kv from './kv_store.ts';
 
 // Import Resend for email sending
 // @ts-ignore - npm: imports are handled by Deno
